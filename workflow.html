@@ -70,8 +70,15 @@
             <b>comparison summary</b> pits the edge cache against direct S3 and the no-cache proxy.
           </li>
           <li>
-            The first run loads DuckDB-WASM (a few MB) — that one-off cost isn't the endpoint's. Run a
-            query twice: the second is the fair, warm comparison. Judge <b>ratios</b>, not absolute ms.
+            Each endpoint runs in a <b>fresh DuckDB instance with a cold cache</b>, and only the query
+            itself is timed (not DuckDB startup). This is deliberate: DuckDB caches remote-file
+            metadata in memory per URL, so reusing one instance would serve a repeat query from
+            DuckDB's own memory (single-digit ms) and measure DuckDB, not the endpoint.
+          </li>
+          <li>
+            Even so, absolute ms swing with your network, and your browser's HTTP cache may warm a URL
+            across runs — judge <b>ratios</b>, run a few times, and cross-check against the
+            <a href="./index.html">range benchmarks</a>, which use <code>cache: no-store</code>.
           </li>
         </ul>
       </section>

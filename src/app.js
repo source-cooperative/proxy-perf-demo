@@ -1,12 +1,10 @@
 import { ENDPOINTS, DATASETS, url } from "./config.js";
 import { SCENARIOS, runScenario, fmt } from "./bench.js";
-import { duckdbScenario, DUCKDB_QUERIES } from "./duckdb.js";
 
-// Assemble the full scenario catalog: raw range benchmarks + the DuckDB query.
-const CATALOG = {
-  ...SCENARIOS,
-  duckdb_count: duckdbScenario("count"),
-};
+// Raw range-read benchmarks. DuckDB queries live in the Query workbench view
+// (workflow.html), where a fresh DuckDB instance per endpoint keeps DuckDB's own
+// cache from confounding the comparison.
+const CATALOG = { ...SCENARIOS };
 
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, attrs = {}, ...kids) => {
@@ -36,7 +34,6 @@ function buildControls() {
   const sc = $("#scenario");
   const groups = [
     ["Raw HTTP range", ["ttfb", "footer", "throughput"]],
-    ["Real tool (DuckDB-WASM)", ["duckdb_count"]],
   ];
   for (const [g, keys] of groups) {
     const og = el("optgroup", { label: g });

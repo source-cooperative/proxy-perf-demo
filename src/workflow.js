@@ -4,7 +4,7 @@
 // single column — and compare how long it takes per endpoint.
 
 import { ENDPOINTS, DATASETS, url } from "./config.js";
-import { runSql } from "./duckdb.js";
+import { newDb, runSqlOn } from "./duckdb.js";
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => {
@@ -98,7 +98,7 @@ async function run() {
   running = new AbortController();
   setRunning(true);
   log(`▶ query · ${dataset.label}`);
-  log("  loading DuckDB-WASM…");
+  log("  fresh DuckDB per endpoint (cold cache) so the timing is the endpoint, not DuckDB's memory…");
 
   const results = [];
   try {
@@ -106,13 +106,17 @@ async function run() {
       if (running.signal.aborted) break;
       const sql = template.replaceAll("{url}", url(e, dataset.path));
       log(`  ${e.label}: running…`);
+      let handle = null;
       try {
-        const r = await runSql(sql, running.signal);
+        handle = await newDb();
+        const r = await runSqlOn(handle.db, sql, running.signal);
         results.push({ e, ...r });
         log(`  ${e.label}: ${r.ms.toFixed(0)} ms · ${r.numRows} row(s)`);
       } catch (err) {
         results.push({ e, error: err.message });
         log(`  ${e.label}: FAILED — ${err.message}`);
+      } finally {
+        if (handle) await handle.close();
       }
     }
     render(dataset, template, results);
