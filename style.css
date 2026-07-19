@@ -20,7 +20,19 @@ body {
   margin: 0; background: var(--bg); color: var(--ink);
   font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
-header { padding: 32px 20px 8px; max-width: 900px; margin: 0 auto; }
+header { padding: 20px 20px 8px; max-width: 900px; margin: 0 auto; }
+.nav { display: flex; gap: 4px; margin-bottom: 14px; }
+.nav a {
+  padding: 6px 14px; border-radius: 999px; text-decoration: none; font-size: 13.5px;
+  font-weight: 600; color: var(--muted); border: 1px solid var(--line);
+}
+.nav a.active { background: var(--accent); color: #06231b; border-color: var(--accent); }
+.nav a:not(.active):hover { color: var(--ink); border-color: var(--muted); }
+textarea {
+  background: var(--panel2); color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 11px; font: 13px/1.5 ui-monospace, Menlo, monospace; width: 100%; resize: vertical;
+}
+textarea:disabled { opacity: .5; }
 h1 { margin: 0 0 4px; font-size: 26px; }
 .sub { color: var(--muted); margin: 0; max-width: 70ch; }
 .sub a, footer a { color: var(--accent); }
@@ -89,11 +101,36 @@ tr.win td:first-child { border-left: 3px solid var(--accent); }
   .tag.bypass { background: #e5e9f0; color: #475569; }
 }
 
-.callout {
-  margin: 12px 0 0; padding: 10px 12px; background: var(--panel2);
-  border-radius: 8px; font-size: 14px;
+/* URLs being hit (control panel) */
+.urls-field { margin-top: 14px; margin-bottom: 0; }
+.urls { display: flex; flex-direction: column; gap: 4px; }
+.urlrow { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.urlrow.off { opacity: .38; }
+.urlrow .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; transform: translateY(1px); }
+.urlrow .urllabel { color: var(--muted); flex: none; min-width: 132px; }
+.url, .rowurl {
+  font-family: ui-monospace, Menlo, monospace; color: var(--accent);
+  text-decoration: none; word-break: break-all;
 }
-.callout b { color: var(--accent); }
+.url:hover, .rowurl:hover { text-decoration: underline; }
+.rowurl { display: block; font-size: 11px; margin-top: 2px; opacity: .85; }
+
+.metricnote { margin: -4px 0 12px; font-size: 12.5px; color: var(--ink); }
+
+/* How-to-read legend */
+.guide-list { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.guide-list li { margin-bottom: 7px; }
+.guide-list b { color: var(--ink); }
+
+.callout {
+  margin: 14px 0 0; padding: 10px 12px; background: var(--panel2); border-radius: 8px; font-size: 14px;
+}
+.callout-h { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+.callout-row { display: flex; justify-content: space-between; padding: 3px 0; border-top: 1px solid var(--line); }
+.callout-row:first-of-type { border-top: none; }
+.callout-row .good { color: var(--accent); }
+.callout-row .bad { color: #e0a458; }
+.callout small { display: block; margin-top: 6px; }
 
 .log {
   background: #0b0f18; color: #cdd6e6; border: 1px solid var(--line); border-radius: 8px;
@@ -101,6 +138,20 @@ tr.win td:first-child { border-left: 3px solid var(--accent); }
   white-space: pre-wrap; margin-top: 6px;
 }
 @media (prefers-color-scheme: light) { .log { background: #0f1420; color: #cdd6e6; } }
+
+/* Query result table */
+.resulthdr { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.resultscroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table.result { font: 12.5px/1.4 ui-monospace, Menlo, monospace; min-width: 100%; }
+table.result th { position: sticky; top: 0; background: var(--panel2); white-space: nowrap; }
+table.result td { white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.sqldetail { margin-top: 12px; }
+.sqldetail summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.sqldetail pre {
+  background: #0b0f18; color: #cdd6e6; border-radius: 8px; padding: 10px 12px; overflow-x: auto;
+  font: 12.5px/1.5 ui-monospace, Menlo, monospace; margin: 8px 0 0;
+}
+@media (prefers-color-scheme: light) { .sqldetail pre { background: #0f1420; } }
 
 footer { color: var(--muted); font-size: 12.5px; margin-top: 20px; }
 footer code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; }

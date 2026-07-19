@@ -13,6 +13,10 @@
   </head>
   <body>
     <header>
+      <nav class="nav">
+        <a href="./index.html" class="active">Range benchmarks</a>
+        <a href="./workflow.html">Query workbench</a>
+      </nav>
       <h1>⚡ Edge-cache speed demo</h1>
       <p class="sub">
         Read the <em>same</em> object three ways — raw S3, the Source Cooperative proxy, and the
@@ -47,6 +51,38 @@
           </div>
         </div>
         <p id="blurb" class="blurb"></p>
+        <div class="field urls-field">
+          <label>URLs being hit</label>
+          <div id="urls" class="urls"></div>
+        </div>
+      </section>
+
+      <section class="panel guide">
+        <label>How to read this</label>
+        <ul class="guide-list">
+          <li>
+            <b>Cold</b> = first request — a cache <span class="tag miss">MISS</span> that also
+            populates the cache. <b>Warm</b> = median of the remaining requests, once the edge cache
+            is filled.
+          </li>
+          <li>
+            <b>Latency</b> (ms — TTFB, footer, DuckDB query time): <b>↓ lower is better</b>.
+            <b>Throughput</b> (MB/s): <b>↑ higher is better</b>. Each result states its direction, and
+            the fastest endpoint's row is highlighted.
+          </li>
+          <li>
+            <b>x-cache</b> = the proxy's disposition for that request:
+            <span class="tag hit">HIT</span> served from the edge cache ·
+            <span class="tag miss">MISS</span> fetched from origin, now cached ·
+            <span class="tag bypass">BYPASS</span> deliberately not cached (full-object,
+            conditional, &gt; 32&nbsp;MiB) · <b>—</b> no proxy at all (direct S3).
+          </li>
+          <li>
+            The <b>comparison summary</b> under each result pits the edge-cache proxy against both the
+            no-cache proxy and direct S3. Absolute numbers swing with your network — judge the
+            <b>ratios</b> and the <code>x-cache</code> disposition, and re-run a few times.
+          </li>
+        </ul>
       </section>
 
       <section id="results"></section>
@@ -58,10 +94,10 @@
 
       <footer>
         <p>
-          Cold = first request (cache MISS + populate). Warm = median of the rest. All requests use
-          <code>cache: no-store</code> so the browser cache never hides the network. The direct S3
-          endpoint reports no <code>x-cache</code> — it has no proxy. Numbers are network-dependent;
-          judge the <em>ratios</em>, and the <code>x-cache</code> disposition, not absolute ms.
+          Methodology: all requests use <code>cache: no-store</code> so the browser cache never hides
+          the network, and no cache-busting query param is added (the proxy only chunk-caches
+          empty-query requests). Requests are interleaved across endpoints so network drift hits them
+          evenly.
         </p>
         <p class="thin">
           Object keys are identical across all three endpoints. Direct =

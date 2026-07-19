@@ -66,6 +66,36 @@ export async function runQuery(sql, url, signal) {
   }
 }
 
+// Run arbitrary SQL and return timing + up to 50 result rows for display.
+// Used by the query-workbench view. BigInts (e.g. count) are coerced to Number
+// so they render/JSON-serialize cleanly.
+export async function runSql(sqlText, signal) {
+  const db = await getDb();
+  const conn = await db.connect();
+  try {
+    const t0 = performance.now();
+    const table = await conn.query(sqlText);
+    const ms = performance.now() - t0;
+    if (signal?.aborted) throw new Error("aborted");
+    const columns = table.schema.fields.map((f) => f.name);
+    // Read each cell by column name off the Arrow row proxy (robust across
+    // arrow versions); coerce BigInt→Number and nested structs→JSON for display.
+    const rows = table.toArray().slice(0, 50).map((r) => {
+      const o = {};
+      for (const c of columns) {
+        let v = r[c];
+        if (typeof v === "bigint") v = Number(v);
+        else if (v != null && typeof v === "object") v = JSON.stringify(v);
+        o[c] = v;
+      }
+      return o;
+    });
+    return { ms, columns, rows, numRows: table.numRows };
+  } finally {
+    await conn.close();
+  }
+}
+
 // A DuckDB "scenario" adapts a query into the same shape bench.runScenario uses,
 // so orchestration/rendering is shared. Query time is the metric.
 export function duckdbScenario(queryKey) {

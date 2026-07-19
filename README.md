@@ -14,6 +14,15 @@ GitHub Pages as static files. All three endpoints send
 `Access-Control-Allow-Origin: *`, and the object key is identical across them,
 so the browser reads them directly and cross-origin.
 
+## Two views
+
+- **Range benchmarks** (`index.html`) — controlled low-level measurement of the raw range-read
+  patterns, showing `x-cache` disposition and warm-vs-cold.
+- **Query workbench** (`workflow.html`) — a realistic analyst workflow: run the same DuckDB-WASM
+  SQL against the remote Parquet through each endpoint and compare query time. Presets exercise
+  different partial-read shapes (footer-only count, first-row-group peek, single-column bbox scan);
+  the SQL is editable. The result is identical across endpoints — only latency differs.
+
 ## Access patterns
 
 - **Raw HTTP range** (Fetch API, no deps):

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Source Cooperative · DuckDB query workbench</title>
+    <meta
+      name="description"
+      content="Run real DuckDB-WASM queries against remote Parquet through direct S3, the proxy, and the PR-189 edge cache — partial reads, side by side."
+    />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🦆</text></svg>" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <nav class="nav">
+        <a href="./index.html">Range benchmarks</a>
+        <a href="./workflow.html" class="active">Query workbench</a>
+      </nav>
+      <h1>🦆 DuckDB query workbench</h1>
+      <p class="sub">
+        A real analyst workflow: query remote Parquet with DuckDB-WASM in your browser. Each query
+        pulls <em>only the bytes it needs</em> over HTTP range requests — run the same one through
+        direct S3, the proxy, and the
+        <a href="https://github.com/source-cooperative/data.source.coop/pull/189">PR&nbsp;#189</a>
+        edge cache, and compare.
+      </p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="field">
+          <label>Endpoints</label>
+          <div id="endpoints" class="chips"></div>
+        </div>
+        <div class="grid">
+          <div class="field">
+            <label for="dataset">Dataset</label>
+            <select id="dataset"></select>
+          </div>
+          <div class="field">
+            <label for="preset">Query</label>
+            <select id="preset"></select>
+          </div>
+          <div class="field narrow">
+            <label>&nbsp;</label>
+            <button id="run">Run query</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="sql">SQL <small class="muted">— <code>{url}</code> is replaced per endpoint</small></label>
+          <textarea id="sql" rows="5" spellcheck="false"></textarea>
+          <p id="reads" class="blurb"></p>
+        </div>
+        <div class="field urls-field">
+          <label>URLs being queried</label>
+          <div id="urls" class="urls"></div>
+        </div>
+      </section>
+
+      <section class="panel guide">
+        <label>How to read this</label>
+        <ul class="guide-list">
+          <li>
+            DuckDB reads remote Parquet with HTTP range requests — the <b>query time</b> is dominated
+            by how fast those range reads come back. <b>↓ lower is better.</b> Fastest endpoint highlighted.
+          </li>
+          <li>
+            The result is identical across endpoints (same object) — only latency differs. The
+            <b>comparison summary</b> pits the edge cache against direct S3 and the no-cache proxy.
+          </li>
+          <li>
+            The first run loads DuckDB-WASM (a few MB) — that one-off cost isn't the endpoint's. Run a
+            query twice: the second is the fair, warm comparison. Judge <b>ratios</b>, not absolute ms.
+          </li>
+        </ul>
+      </section>
+
+      <section id="results"></section>
+
+      <section class="panel">
+        <label>Live log</label>
+        <div id="log" class="log"></div>
+      </section>
+
+      <footer>
+        <p class="thin">
+          DuckDB-WASM is loaded from jsDelivr (single-thread build — no cross-origin isolation needed).
+          Object keys are identical across endpoints. Source:
+          <a href="https://github.com/source-cooperative/proxy-perf-demo">proxy-perf-demo</a>.
+        </p>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/workflow.js"></script>
+  </body>
+</html>

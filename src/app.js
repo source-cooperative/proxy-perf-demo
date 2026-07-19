@@ -44,11 +44,33 @@ function buildControls() {
     sc.append(og);
   }
   sc.addEventListener("change", showBlurb);
+  ds.addEventListener("change", showUrls);
+  epBox.addEventListener("change", showUrls);
   showBlurb();
+  showUrls();
 }
 
 function showBlurb() {
   $("#blurb").textContent = CATALOG[$("#scenario").value].blurb || "";
+}
+
+// Live list of the exact URLs each selected endpoint will be hit at, for the
+// currently selected dataset. The object key is identical across endpoints;
+// only the base differs.
+function showUrls() {
+  const dataset = DATASETS.find((d) => d.id === $("#dataset").value);
+  const box = $("#urls");
+  box.replaceChildren();
+  for (const e of ENDPOINTS) {
+    const on = $(`#ep-${e.id}`)?.checked;
+    box.append(
+      el("div", { className: `urlrow ${on ? "" : "off"}` },
+        el("span", { className: "dot", style: `background:${e.color}` }),
+        el("span", { className: "urllabel" }, e.label),
+        el("a", { className: "url", href: url(e, dataset.path), target: "_blank", rel: "noopener",
+                  textContent: url(e, dataset.path) }))
+    );
+  }
 }
 
 function selectedEndpoints() {
@@ -73,10 +95,12 @@ async function run() {
   log(`  dataset: ${dataset.label}`);
   log(`  endpoints: ${endpoints.map((e) => e.label).join(", ")} · ${samples} samples (interleaved)`);
 
+  const resolveUrl = (e) => url(e, dataset.path);
+  for (const e of endpoints) log(`  → ${e.label}: ${resolveUrl(e)}`);
+
   try {
-    const resolveUrl = (e) => url(e, dataset.path);
     const result = await runScenario(scenario, endpoints, resolveUrl, samples, running.signal, log);
-    renderResult(scenario, endpoints, result);
+    renderResult(scenario, endpoints, result, resolveUrl);
     log("✓ done");
   } catch (err) {
     log(`✗ ${err.message}`);
@@ -87,10 +111,17 @@ async function run() {
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────
-function renderResult(scenario, endpoints, result) {
+function renderResult(scenario, endpoints, result, resolveUrl) {
   const wrap = $("#results");
   const card = el("div", { className: "card" });
   card.append(el("h3", {}, scenario.label));
+
+  // Metric direction, stated up front so the table isn't ambiguous.
+  const arrow = result.lowerIsBetter ? "↓" : "↑";
+  const dir = result.lowerIsBetter ? "lower is better" : "higher is better";
+  card.append(el("p", { className: "metricnote" },
+    `Metric: ${result.unit} · ${arrow} ${dir}. `,
+    el("span", { className: "muted" }, "Fastest endpoint highlighted.")));
 
   const rows = endpoints
     .map((e) => ({ e, r: result.byEndpoint.get(e.id) }))
@@ -108,7 +139,7 @@ function renderResult(scenario, endpoints, result) {
     el("tr", {},
       el("th", {}, "Endpoint"),
       el("th", {}, "Cold"),
-      el("th", {}, `Warm (${result.unit})`),
+      el("th", {}, `Warm (${result.unit}) ${arrow}`),
       el("th", { className: "barcol" }, "Warm — visual"),
       el("th", {}, "x-cache"))
   );
@@ -121,7 +152,10 @@ function renderResult(scenario, endpoints, result) {
     const disp = summarizeXCache(r.xCaches);
     table.append(
       el("tr", { className: e.id === winner ? "win" : "" },
-        el("td", {}, el("span", { className: "dot", style: `background:${e.color}` }), ` ${e.label}`),
+        el("td", {},
+          el("div", {}, el("span", { className: "dot", style: `background:${e.color}` }), ` ${e.label}`),
+          el("a", { className: "rowurl", href: resolveUrl(e), target: "_blank", rel: "noopener",
+                    textContent: shortUrl(resolveUrl(e)) })),
         el("td", {}, r.error ? "—" : fmt(r.cold, result.unit)),
         el("td", {}, el("b", {}, r.error ? "FAIL" : fmt(r.warm, result.unit))),
         el("td", { className: "barcol" }, r.error ? el("small", { className: "err" }, r.error) : bar),
@@ -130,17 +164,45 @@ function renderResult(scenario, endpoints, result) {
   }
   card.append(table);
 
-  // Speedup callout vs the "Proxy (no cache)" baseline when present.
-  const base = rows.find((x) => x.e.id === "staging");
+  // Comparison summary: the edge-cache proxy relative to BOTH the no-cache
+  // proxy and direct S3 (whichever are present), warm-vs-warm.
   const prev = rows.find((x) => x.e.id === "preview");
-  if (base?.r.warm && prev?.r.warm && !base.r.error && !prev.r.error) {
-    const s = result.lowerIsBetter ? base.r.warm / prev.r.warm : prev.r.warm / base.r.warm;
-    card.append(el("p", { className: "callout" },
-      `Edge cache vs no-cache proxy (warm): `,
-      el("b", {}, `${s.toFixed(1)}×`),
-      s >= 1 ? " faster" : " (slower — expected on throughput / bandwidth-bound reads)"));
+  if (prev?.r.warm && !prev.r.error) {
+    const comps = [];
+    for (const otherId of ["direct", "staging"]) {
+      const o = rows.find((x) => x.e.id === otherId);
+      if (!o?.r.warm || o.r.error) continue;
+      const s = result.lowerIsBetter ? o.r.warm / prev.r.warm : prev.r.warm / o.r.warm;
+      comps.push({ label: o.e.label, s });
+    }
+    if (comps.length) {
+      const box = el("div", { className: "callout" });
+      box.append(el("div", { className: "callout-h" }, "Edge cache vs. (warm):"));
+      for (const c of comps) {
+        box.append(el("div", { className: "callout-row" },
+          el("span", {}, c.label),
+          el("b", { className: c.s >= 1 ? "good" : "bad" },
+            `${c.s.toFixed(1)}× ${c.s >= 1 ? "faster" : "slower"}`)));
+      }
+      if (comps.some((c) => c.s < 1)) {
+        box.append(el("small", { className: "muted" },
+          "Slower is expected on throughput / bandwidth-bound reads — the cache adds a re-serve hop."));
+      }
+      card.append(box);
+    }
   }
   wrap.prepend(card);
+}
+
+// Trim a URL to host + last path segment for compact table display.
+function shortUrl(u) {
+  try {
+    const { host, pathname } = new URL(u);
+    const last = pathname.split("/").filter(Boolean).pop() || "";
+    return `${host}/…/${last}`;
+  } catch {
+    return u;
+  }
 }
 
 function pickWinner(rows, lowerIsBetter) {
