@@ -1,0 +1,173 @@
+import { ENDPOINTS, DATASETS, url } from "./config.js";
+import { SCENARIOS, runScenario, fmt } from "./bench.js";
+import { duckdbScenario, DUCKDB_QUERIES } from "./duckdb.js";
+
+// Assemble the full scenario catalog: raw range benchmarks + the DuckDB query.
+const CATALOG = {
+  ...SCENARIOS,
+  duckdb_count: duckdbScenario("count"),
+};
+
+const $ = (sel) => document.querySelector(sel);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = Object.assign(document.createElement(tag), attrs);
+  for (const k of kids) n.append(k);
+  return n;
+};
+
+let running = null; // AbortController while a run is in flight
+
+function buildControls() {
+  // Endpoints (all on by default)
+  const epBox = $("#endpoints");
+  for (const e of ENDPOINTS) {
+    const cb = el("input", { type: "checkbox", checked: true, value: e.id, id: `ep-${e.id}` });
+    epBox.append(
+      el("label", { className: "chip", style: `--c:${e.color}` }, cb,
+        el("span", { className: "dot" }),
+        el("b", {}, e.label),
+        el("small", {}, ` ${e.note}`))
+    );
+  }
+  // Datasets
+  const ds = $("#dataset");
+  for (const d of DATASETS) ds.append(el("option", { value: d.id, textContent: d.label }));
+  // Scenarios
+  const sc = $("#scenario");
+  const groups = [
+    ["Raw HTTP range", ["ttfb", "footer", "throughput"]],
+    ["Real tool (DuckDB-WASM)", ["duckdb_count"]],
+  ];
+  for (const [g, keys] of groups) {
+    const og = el("optgroup", { label: g });
+    for (const k of keys) og.append(el("option", { value: k, textContent: CATALOG[k].label }));
+    sc.append(og);
+  }
+  sc.addEventListener("change", showBlurb);
+  showBlurb();
+}
+
+function showBlurb() {
+  $("#blurb").textContent = CATALOG[$("#scenario").value].blurb || "";
+}
+
+function selectedEndpoints() {
+  return ENDPOINTS.filter((e) => $(`#ep-${e.id}`).checked);
+}
+
+async function run() {
+  if (running) {
+    running.abort();
+    return;
+  }
+  const endpoints = selectedEndpoints();
+  const dataset = DATASETS.find((d) => d.id === $("#dataset").value);
+  const scenario = CATALOG[$("#scenario").value];
+  const samples = Math.max(2, Math.min(20, +$("#samples").value || 6));
+  if (endpoints.length < 1) return log("Select at least one endpoint.");
+
+  running = new AbortController();
+  setRunning(true);
+  clearOutput();
+  log(`▶ ${scenario.label}`);
+  log(`  dataset: ${dataset.label}`);
+  log(`  endpoints: ${endpoints.map((e) => e.label).join(", ")} · ${samples} samples (interleaved)`);
+
+  try {
+    const resolveUrl = (e) => url(e, dataset.path);
+    const result = await runScenario(scenario, endpoints, resolveUrl, samples, running.signal, log);
+    renderResult(scenario, endpoints, result);
+    log("✓ done");
+  } catch (err) {
+    log(`✗ ${err.message}`);
+  } finally {
+    setRunning(false);
+    running = null;
+  }
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────
+function renderResult(scenario, endpoints, result) {
+  const wrap = $("#results");
+  const card = el("div", { className: "card" });
+  card.append(el("h3", {}, scenario.label));
+
+  const rows = endpoints
+    .map((e) => ({ e, r: result.byEndpoint.get(e.id) }))
+    .filter((x) => x.r);
+
+  // Bars are scaled to the best value so the comparison is visual. For
+  // lower-is-better (latency) a shorter bar wins; for MB/s a longer bar wins.
+  const warmVals = rows.map((x) => x.r.warm).filter((v) => v != null);
+  const maxVal = Math.max(...warmVals, 0.0001);
+
+  const winner = pickWinner(rows, result.lowerIsBetter);
+
+  const table = el("table");
+  table.append(
+    el("tr", {},
+      el("th", {}, "Endpoint"),
+      el("th", {}, "Cold"),
+      el("th", {}, `Warm (${result.unit})`),
+      el("th", { className: "barcol" }, "Warm — visual"),
+      el("th", {}, "x-cache"))
+  );
+  for (const { e, r } of rows) {
+    const barPct = r.warm == null ? 0 : result.lowerIsBetter
+      ? (1 - r.warm / (maxVal * 1.05)) * 100 // shorter = faster
+      : (r.warm / maxVal) * 100;
+    const bar = el("div", { className: "bar" },
+      el("span", { style: `width:${Math.max(3, barPct).toFixed(1)}%;background:${e.color}` }));
+    const disp = summarizeXCache(r.xCaches);
+    table.append(
+      el("tr", { className: e.id === winner ? "win" : "" },
+        el("td", {}, el("span", { className: "dot", style: `background:${e.color}` }), ` ${e.label}`),
+        el("td", {}, r.error ? "—" : fmt(r.cold, result.unit)),
+        el("td", {}, el("b", {}, r.error ? "FAIL" : fmt(r.warm, result.unit))),
+        el("td", { className: "barcol" }, r.error ? el("small", { className: "err" }, r.error) : bar),
+        el("td", {}, disp))
+    );
+  }
+  card.append(table);
+
+  // Speedup callout vs the "Proxy (no cache)" baseline when present.
+  const base = rows.find((x) => x.e.id === "staging");
+  const prev = rows.find((x) => x.e.id === "preview");
+  if (base?.r.warm && prev?.r.warm && !base.r.error && !prev.r.error) {
+    const s = result.lowerIsBetter ? base.r.warm / prev.r.warm : prev.r.warm / base.r.warm;
+    card.append(el("p", { className: "callout" },
+      `Edge cache vs no-cache proxy (warm): `,
+      el("b", {}, `${s.toFixed(1)}×`),
+      s >= 1 ? " faster" : " (slower — expected on throughput / bandwidth-bound reads)"));
+  }
+  wrap.prepend(card);
+}
+
+function pickWinner(rows, lowerIsBetter) {
+  let best = null, bestV = lowerIsBetter ? Infinity : -Infinity;
+  for (const { e, r } of rows) {
+    if (r.error || r.warm == null) continue;
+    if (lowerIsBetter ? r.warm < bestV : r.warm > bestV) { bestV = r.warm; best = e.id; }
+  }
+  return best;
+}
+
+function summarizeXCache(xs) {
+  const seen = xs.filter(Boolean);
+  if (!seen.length) return el("small", { className: "muted" }, "—");
+  const last = seen[seen.length - 1];
+  const cls = last === "HIT" ? "hit" : last === "MISS" ? "miss" : "bypass";
+  return el("span", { className: `tag ${cls}` }, seen.join(" → "));
+}
+
+// ── Log + state ───────────────────────────────────────────────────────
+const log = (m) => { const l = $("#log"); l.append(el("div", {}, m)); l.scrollTop = l.scrollHeight; };
+const clearOutput = () => { $("#log").replaceChildren(); };
+function setRunning(on) {
+  $("#run").textContent = on ? "Stop" : "Run benchmark";
+  $("#run").classList.toggle("stop", on);
+  for (const id of ["dataset", "scenario", "samples"]) $(`#${id}`).disabled = on;
+}
+
+buildControls();
+$("#run").addEventListener("click", run);

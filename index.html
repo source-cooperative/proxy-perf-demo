@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Source Cooperative · edge-cache speed demo</title>
+    <meta
+      name="description"
+      content="In-browser A/B of dataset read speed across direct S3, the Source Cooperative proxy, and the PR-189 chunk-cache preview."
+    />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>⚡</text></svg>" />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>⚡ Edge-cache speed demo</h1>
+      <p class="sub">
+        Read the <em>same</em> object three ways — raw S3, the Source Cooperative proxy, and the
+        <a href="https://github.com/source-cooperative/data.source.coop/pull/189">PR&nbsp;#189</a>
+        chunk-cache preview — straight from your browser, and watch the difference per access pattern.
+      </p>
+    </header>
+
+    <main>
+      <section class="panel">
+        <div class="field">
+          <label>Endpoints</label>
+          <div id="endpoints" class="chips"></div>
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="dataset">Dataset</label>
+            <select id="dataset"></select>
+          </div>
+          <div class="field">
+            <label for="scenario">Access pattern</label>
+            <select id="scenario"></select>
+          </div>
+          <div class="field narrow">
+            <label for="samples">Samples</label>
+            <input id="samples" type="number" min="2" max="20" value="6" />
+          </div>
+          <div class="field narrow">
+            <label>&nbsp;</label>
+            <button id="run">Run benchmark</button>
+          </div>
+        </div>
+        <p id="blurb" class="blurb"></p>
+      </section>
+
+      <section id="results"></section>
+
+      <section class="panel">
+        <label>Live log</label>
+        <div id="log" class="log"></div>
+      </section>
+
+      <footer>
+        <p>
+          Cold = first request (cache MISS + populate). Warm = median of the rest. All requests use
+          <code>cache: no-store</code> so the browser cache never hides the network. The direct S3
+          endpoint reports no <code>x-cache</code> — it has no proxy. Numbers are network-dependent;
+          judge the <em>ratios</em>, and the <code>x-cache</code> disposition, not absolute ms.
+        </p>
+        <p class="thin">
+          Object keys are identical across all three endpoints. Direct =
+          <code>s3.us-west-2.amazonaws.com/us-west-2.opendata.source.coop/…</code>. Source:
+          <a href="https://github.com/source-cooperative/proxy-perf-demo">proxy-perf-demo</a>.
+        </p>
+      </footer>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
