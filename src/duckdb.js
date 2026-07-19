@@ -9,28 +9,32 @@
 // without cross-origin isolation (COOP/COEP headers we can't set there).
 
 const DUCKDB_VERSION = "1.29.0";
-const CDN = `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/dist`;
 
 let dbPromise = null;
 
 async function getDb() {
   if (dbPromise) return dbPromise;
   dbPromise = (async () => {
-    const duckdb = await import(`${CDN}/duckdb-browser.mjs`);
-    const bundle = {
-      mainModule: `${CDN}/duckdb-eh.wasm`,
-      mainWorker: `${CDN}/duckdb-browser-eh.worker.js`,
-    };
-    // The worker must be same-origin; wrap the CDN worker in a Blob URL.
+    // Import via jsDelivr's `/+esm` bundle, which rewrites the module's bare
+    // `apache-arrow` import into a resolvable URL. A plain `dist/duckdb-browser.mjs`
+    // import fails in the browser ("Failed to resolve module specifier apache-arrow").
+    const duckdb = await import(
+      `https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_VERSION}/+esm`
+    );
+    // Let duckdb pick the wasm + worker bundle for this browser (eh vs mvp); the
+    // URLs point at the matching version's dist.
+    const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+    // The worker URL is cross-origin (jsDelivr) — a classic `Worker()` can't load
+    // it directly, but `importScripts` can, so wrap it in a same-origin Blob.
     const workerUrl = URL.createObjectURL(
       new Blob([`importScripts("${bundle.mainWorker}");`], { type: "text/javascript" })
     );
     const worker = new Worker(workerUrl);
-    const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
-    const db = new duckdb.AsyncDuckDB(logger, worker);
-    await db.instantiate(bundle.mainModule);
+    const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING), worker);
+    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
     URL.revokeObjectURL(workerUrl);
-    await (await db.connect()).query("INSTALL httpfs; LOAD httpfs;").catch(() => {});
+    // httpfs is compiled into duckdb-wasm — remote `read_parquet('https://…')`
+    // works out of the box via HTTP range requests.
     return db;
   })();
   return dbPromise;
